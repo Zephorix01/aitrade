@@ -125,5 +125,62 @@ def auto_daily_retrain(symbol="AAPL", days=90):
     df.to_csv(log_file, index=True)
     return log_file
 
-# The rest of the app code goes here (backtest UI, Streamlit layout, etc.)
-# Ensure each input/button uses a unique key argument if reused
+# --- Streamlit UI ---
+st.title("📈 AI-Powered Strategy Backtester")
+symbol = st.sidebar.text_input("Symbol", "AAPL", key="symbol_input")
+days = st.sidebar.slider("Days of Data", 30, 180, 90, key="days_slider")
+
+strategies = {
+    "SMA Crossover": sma_crossover_strategy,
+    "Buy & Hold": buy_and_hold_strategy,
+    "RSI": rsi_strategy,
+    "Momentum": momentum_strategy,
+    "Mean Reversion": mean_reversion_strategy,
+    "MACD": macd_strategy,
+    "Bollinger Bands": bollinger_strategy,
+    "EMA Crossover": ema_strategy
+}
+
+selected = st.sidebar.multiselect("Select Strategies", strategies.keys(), default=list(strategies.keys()), key="strategy_select")
+
+if st.sidebar.button("Run Backtest", key="run_backtest_btn"):
+    bars = fetch_data(symbol, days)
+    if not bars:
+        st.warning("No data fetched.")
+    else:
+        metrics_all = {}
+        full_trades = []
+
+        for name in selected:
+            st.subheader(f"Strategy: {name}")
+            sig = strategies[name](bars)
+            perf, trades, metrics = backtest_strategy(bars, sig)
+            metrics_all[name] = metrics
+            full_trades.extend(trades)
+
+            st.write(metrics)
+            fig, ax = plt.subplots()
+            ax.plot(perf)
+            ax.set_title(f"{name} Portfolio Value")
+            st.pyplot(fig)
+
+        if metrics_all:
+            best = select_best_strategy(metrics_all)
+            st.success(f"🏆 Best Strategy: {best}")
+            updated = reinforcement_learn(load_model(), metrics_all)
+            save_model({"weights": updated})
+            track_rl_weights(updated)
+
+            roll = rolling_backtest(bars, strategies[best])
+            st.subheader("Rolling Backtest")
+            fig2, ax2 = plt.subplots()
+            ax2.plot(roll)
+            ax2.set_title("Rolling Performance")
+            st.pyplot(fig2)
+
+            st.download_button(
+                label="📥 Download Trades",
+                data=pd.DataFrame(full_trades, columns=["Timestamp", "Action", "Shares", "Price"]).to_csv(index=False),
+                file_name="trades.csv",
+                mime="text/csv"
+            )
