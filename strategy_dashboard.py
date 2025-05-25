@@ -52,12 +52,7 @@ def auto_daily_retrain(symbol="AAPL", days=90):
     Path("logs").mkdir(exist_ok=True)
     bars = fetch_data(symbol, days)
 
-    from strategy_dashboard import (
-        sma_crossover_strategy, buy_and_hold_strategy, rsi_strategy,
-        momentum_strategy, mean_reversion_strategy, macd_strategy,
-        bollinger_strategy, ema_strategy, backtest_strategy,
-        reinforcement_learn, load_model, save_model
-    )
+   
 
     strategies = {
         "SMA Crossover": sma_crossover_strategy,
