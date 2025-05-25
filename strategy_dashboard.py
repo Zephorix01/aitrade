@@ -42,7 +42,7 @@ def place_paper_trade(symbol, qty, side="buy"):
 
 def get_latest_price(symbol):
     try:
-        trade = api.get_last_trade(symbol)
+        trade = api.get_latest_trade(symbol)
         return trade.price
     except Exception as e:
         st.error(f"Failed to retrieve price: {e}")
