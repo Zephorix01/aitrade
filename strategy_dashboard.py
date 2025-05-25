@@ -125,7 +125,7 @@ if st.sidebar.checkbox("📅 Run Daily Retrain + Email Summary", key="daily_retr
 
 # --- Live Trading Controls ---
 st.sidebar.subheader("📤 Live Trade Simulation")
-trade_symbol = st.sidebar.text_input("Trade Symbol", "AAPL")
+trade_symbol = st.sidebar.text_input("Trade Symbol", "AAPL", key="trade_symbol")
 trade_qty = st.sidebar.number_input("Quantity", min_value=1, value=10)
 
 col1, col2 = st.sidebar.columns(2)
@@ -147,7 +147,7 @@ if st.sidebar.checkbox("Show Strategy Weights"):
 # --- Alert System (Log Only for Now) ---
 st.sidebar.subheader("📣 Strategy Alert Preview")
 alert_price = st.sidebar.number_input("Trigger Price", min_value=0.0, value=100.0, step=1.0)
-alert_symbol = st.sidebar.text_input("Alert Symbol", "AAPL")
+alert_symbol = st.sidebar.text_input("Alert Symbol", "AAPL", key="alert_symbol")
 latest_price = 0.0
 
 try:
@@ -162,7 +162,7 @@ except Exception as e:
 
 # --- Strategy Selection and Backtest ---
 st.title("📈 AI-Powered Trading Strategy Dashboard")
-symbol = st.sidebar.text_input("Stock Symbol", "AAPL")
+symbol = st.sidebar.text_input("Stock Symbol", "AAPL", key="stock_symbol")
 days = st.sidebar.slider("Days of Historical Data", 30, 180, 90)
 
 from strategy_dashboard import (
