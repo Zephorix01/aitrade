@@ -46,13 +46,57 @@ def track_rl_weights(weights):
     st.subheader("📊 Reinforcement Learning Strategy Weights")
     st.bar_chart(df)
 
+# Placeholder strategy functions (mock)
+def sma_crossover_strategy(data): return [random.choice(['buy', 'sell', 'hold']) for _ in data]
+def buy_and_hold_strategy(data): return ['buy'] + ['hold'] * (len(data)-1)
+def rsi_strategy(data): return [random.choice(['buy', 'sell', 'hold']) for _ in data]
+def momentum_strategy(data): return [random.choice(['buy', 'sell', 'hold']) for _ in data]
+def mean_reversion_strategy(data): return [random.choice(['buy', 'sell', 'hold']) for _ in data]
+def macd_strategy(data): return [random.choice(['buy', 'sell', 'hold']) for _ in data]
+def bollinger_strategy(data): return [random.choice(['buy', 'sell', 'hold']) for _ in data]
+def ema_strategy(data): return [random.choice(['buy', 'sell', 'hold']) for _ in data]
+
+def backtest_strategy(data, signals):
+    portfolio_value = [10000]
+    trades = []
+    for i, signal in enumerate(signals):
+        if signal == 'buy':
+            portfolio_value.append(portfolio_value[-1] * 1.01)
+            trades.append((i, 'BUY', 10, 100 + i))
+        elif signal == 'sell':
+            portfolio_value.append(portfolio_value[-1] * 0.99)
+            trades.append((i, 'SELL', 10, 100 + i))
+        else:
+            portfolio_value.append(portfolio_value[-1])
+    metrics = {
+        'final_value': portfolio_value[-1],
+        'sharpe_ratio': np.mean(portfolio_value)/np.std(portfolio_value),
+        'max_drawdown': max(np.maximum.accumulate(portfolio_value) - portfolio_value),
+        'win_rate': sum(1 for x in signals if x == 'buy') / len(signals),
+        'num_trades': len(trades)
+    }
+    return portfolio_value, trades, metrics
+
+def load_model():
+    return {"weights": {}}
+
+def save_model(weights):
+    pass
+
+def reinforcement_learn(weights, metrics):
+    return {k: random.random() for k in metrics}
+
+def rolling_backtest(data, strategy_func):
+    return [10000 + i * random.uniform(-10, 10) for i in range(10)]
+
+def select_best_strategy(metrics):
+    return max(metrics.items(), key=lambda x: x[1]['final_value'])[0]
+
 # --- Daily Auto-Retrain and Logging ---
 def auto_daily_retrain(symbol="AAPL", days=90):
     from pathlib import Path
     Path("logs").mkdir(exist_ok=True)
     bars = fetch_data(symbol, days)
-
-   
 
     strategies = {
         "SMA Crossover": sma_crossover_strategy,
@@ -81,165 +125,5 @@ def auto_daily_retrain(symbol="AAPL", days=90):
     df.to_csv(log_file, index=True)
     return log_file
 
-# --- Optional Email Alerts ---
-def send_email_alert(subject, body):
-    import smtplib, ssl
-    from email.message import EmailMessage
-
-    EMAIL_FROM = "reece.flew@gmail.com"
-    EMAIL_TO = "reece.flew@gmail.com"
-    EMAIL_PASS = "Hq1569801"
-    EMAIL_HOST = "smtp.gmail.com"
-    EMAIL_PORT = 465
-
-    msg = EmailMessage()
-    msg.set_content(body)
-    msg["Subject"] = subject
-    msg["From"] = EMAIL_FROM
-    msg["To"] = EMAIL_TO
-
-    try:
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, context=context) as server:
-            server.login(EMAIL_FROM, EMAIL_PASS)
-            server.send_message(msg)
-        st.sidebar.success("✅ Email summary sent.")
-    except Exception as e:
-        st.sidebar.error(f"❌ Email send failed: {e}")
-
-# --- Run retrain and email if checkbox is active ---
-if st.sidebar.checkbox("📅 Run Daily Retrain + Email Summary", key="daily_retrain_checkbox"):
-    log_file = auto_daily_retrain()
-    st.sidebar.success(f"Daily retrain complete. Log: {log_file}")
-    if st.sidebar.checkbox("✉️ Send Email Summary", key="send_email_checkbox"):
-        with open(log_file, "r") as f:
-            summary = f.read()
-        send_email_alert("Daily Trading Strategy Summary", summary)
-
-# Keep the rest of the existing code as-is below...
-
-# --- Live Trading Controls ---
-st.sidebar.subheader("📤 Live Trade Simulation")
-trade_symbol = st.sidebar.text_input("Trade Symbol", "AAPL", key="trade_symbol")
-trade_qty = st.sidebar.number_input("Quantity", min_value=1, value=10)
-
-col1, col2 = st.sidebar.columns(2)
-if col1.button("Buy Now"):
-    message = place_paper_trade(trade_symbol, trade_qty, side="buy")
-    st.sidebar.success(message)
-if col2.button("Sell Now"):
-    message = place_paper_trade(trade_symbol, trade_qty, side="sell")
-    st.sidebar.success(message)
-
-# --- RL Weight Tracker Visualization ---
-if st.sidebar.checkbox("Show Strategy Weights"):
-    weights = load_model().get("weights", {})
-    if weights:
-        track_rl_weights(weights)
-    else:
-        st.info("No weights available yet. Run a backtest first.")
-
-# --- Alert System (Log Only for Now) ---
-st.sidebar.subheader("📣 Strategy Alert Preview")
-alert_price = st.sidebar.number_input("Trigger Price", min_value=0.0, value=100.0, step=1.0)
-alert_symbol = st.sidebar.text_input("Alert Symbol", "AAPL", key="alert_symbol")
-latest_price = 0.0
-
-try:
-    latest_price = api.get_stock_latest_trade(alert_symbol).price
-    st.sidebar.write(f"🔎 Current Price: ${latest_price:.2f}")
-    if latest_price >= alert_price:
-        st.sidebar.success("📈 Alert: Price has reached or exceeded your target!")
-    else:
-        st.sidebar.info("Price has not yet reached the target.")
-except Exception as e:
-    st.sidebar.error(f"Failed to retrieve price: {e}")
-
-# --- Strategy Selection and Backtest ---
-st.title("📈 AI-Powered Trading Strategy Dashboard")
-symbol = st.sidebar.text_input("Stock Symbol", "AAPL", key="stock_symbol")
-days = st.sidebar.slider("Days of Historical Data", 30, 180, 90)
-
-from strategy_dashboard import (
-    sma_crossover_strategy, buy_and_hold_strategy, rsi_strategy,
-    momentum_strategy, mean_reversion_strategy, macd_strategy,
-    bollinger_strategy, ema_strategy, backtest_strategy,
-    reinforcement_learn, load_model, save_model,
-    rolling_backtest, select_best_strategy
-)
-
-strategies = {
-    "SMA Crossover": sma_crossover_strategy,
-    "Buy & Hold": buy_and_hold_strategy,
-    "RSI": rsi_strategy,
-    "Momentum": momentum_strategy,
-    "Mean Reversion": mean_reversion_strategy,
-    "MACD": macd_strategy,
-    "Bollinger Bands": bollinger_strategy,
-    "EMA Crossover": ema_strategy
-}
-
-selected_strategies = st.sidebar.multiselect("Select Strategies", list(strategies.keys()), default=list(strategies.keys()))
-
-if st.sidebar.button("Run Backtest"):
-    bars = fetch_data(symbol, days)
-    all_metrics = {}
-    all_performance = {}
-    full_trade_log = []
-
-    for name in selected_strategies:
-        st.subheader(f"Strategy: {name}")
-        strategy_func = strategies[name]
-        signals = strategy_func(bars)
-        performance, trades, metrics = backtest_strategy(bars, signals)
-        all_metrics[name] = metrics
-        all_performance[name] = performance
-        full_trade_log += trades
-        st.write(f"Final Value: ${metrics['final_value']:.2f}")
-        st.write(f"Sharpe Ratio: {metrics['sharpe_ratio']:.4f}")
-        st.write(f"Max Drawdown: {metrics['max_drawdown']:.2%}")
-        st.write(f"Win Rate: {metrics['win_rate']:.2%}")
-        st.write(f"Trades: {metrics['num_trades']}")
-        fig, ax = plt.subplots()
-        ax.plot(performance, label=name)
-        ax.set_title(f"{name} Performance")
-        ax.set_xlabel("Days")
-        ax.set_ylabel("Portfolio Value ($)")
-        ax.legend()
-        st.pyplot(fig)
-
-    if all_metrics:
-        best = select_best_strategy(all_metrics)
-        st.success(f"🏆 Best Strategy: {best}")
-        weights = load_model()
-        updated_weights = reinforcement_learn(weights, all_metrics)
-        save_model({"weights": updated_weights})
-        st.write("Updated Strategy Weights:")
-        st.json(updated_weights)
-
-        st.subheader("Rolling Backtest")
-        rolling_result = rolling_backtest(bars, strategies[best])
-        fig2, ax2 = plt.subplots()
-        ax2.plot(rolling_result, label=f"{best} Rolling")
-        ax2.set_title("Rolling Backtest Result")
-        ax2.set_xlabel("Rolling Windows")
-        ax2.set_ylabel("Portfolio End Value")
-        ax2.legend()
-        st.pyplot(fig2)
-
-        st.download_button(
-            label="📥 Download Trade History CSV",
-            data=pd.DataFrame(full_trade_log, columns=["Timestamp", "Action", "Shares", "Price"]).to_csv(index=False),
-            file_name="trades.csv",
-            mime="text/csv"
-        )
-
-# --- Deployment Note ---
-st.markdown("""
----
-🌐 This dashboard is now ready for **Streamlit Cloud Deployment**.
-To deploy:
-1. Push this file to a GitHub repo
-2. Go to [streamlit.io/cloud](https://streamlit.io/cloud)
-3. Connect the repo and deploy!
-""")
+# The rest of the app code goes here (backtest UI, Streamlit layout, etc.)
+# Ensure each input/button uses a unique key argument if reused
