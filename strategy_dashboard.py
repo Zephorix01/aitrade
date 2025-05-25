@@ -1,4 +1,4 @@
-\import streamlit as st
+import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -113,10 +113,10 @@ def send_email_alert(subject, body):
         st.sidebar.error(f"❌ Email send failed: {e}")
 
 # --- Run retrain and email if checkbox is active ---
-if st.sidebar.checkbox("📅 Run Daily Retrain + Email Summary"):
+if st.sidebar.checkbox("📅 Run Daily Retrain + Email Summary", key="daily_retrain"):
     log_file = auto_daily_retrain()
     st.sidebar.success(f"Daily retrain complete. Log: {log_file}")
-    if st.sidebar.checkbox("✉️ Send Email Summary"):
+    if st.sidebar.checkbox("✉️ Send Email Summary", key="send_email_summary"):
         with open(log_file, "r") as f:
             summary = f.read()
         send_email_alert("Daily Trading Strategy Summary", summary)
