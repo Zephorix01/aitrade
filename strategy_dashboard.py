@@ -1,4 +1,4 @@
-import streamlit as st
+\import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -159,6 +159,85 @@ try:
         st.sidebar.info("Price has not yet reached the target.")
 except Exception as e:
     st.sidebar.error(f"Failed to retrieve price: {e}")
+
+# --- Strategy Selection and Backtest ---
+st.title("📈 AI-Powered Trading Strategy Dashboard")
+symbol = st.sidebar.text_input("Stock Symbol", "AAPL")
+days = st.sidebar.slider("Days of Historical Data", 30, 180, 90)
+
+from strategy_dashboard import (
+    sma_crossover_strategy, buy_and_hold_strategy, rsi_strategy,
+    momentum_strategy, mean_reversion_strategy, macd_strategy,
+    bollinger_strategy, ema_strategy, backtest_strategy,
+    reinforcement_learn, load_model, save_model,
+    rolling_backtest, select_best_strategy
+)
+
+strategies = {
+    "SMA Crossover": sma_crossover_strategy,
+    "Buy & Hold": buy_and_hold_strategy,
+    "RSI": rsi_strategy,
+    "Momentum": momentum_strategy,
+    "Mean Reversion": mean_reversion_strategy,
+    "MACD": macd_strategy,
+    "Bollinger Bands": bollinger_strategy,
+    "EMA Crossover": ema_strategy
+}
+
+selected_strategies = st.sidebar.multiselect("Select Strategies", list(strategies.keys()), default=list(strategies.keys()))
+
+if st.sidebar.button("Run Backtest"):
+    bars = fetch_data(symbol, days)
+    all_metrics = {}
+    all_performance = {}
+    full_trade_log = []
+
+    for name in selected_strategies:
+        st.subheader(f"Strategy: {name}")
+        strategy_func = strategies[name]
+        signals = strategy_func(bars)
+        performance, trades, metrics = backtest_strategy(bars, signals)
+        all_metrics[name] = metrics
+        all_performance[name] = performance
+        full_trade_log += trades
+        st.write(f"Final Value: ${metrics['final_value']:.2f}")
+        st.write(f"Sharpe Ratio: {metrics['sharpe_ratio']:.4f}")
+        st.write(f"Max Drawdown: {metrics['max_drawdown']:.2%}")
+        st.write(f"Win Rate: {metrics['win_rate']:.2%}")
+        st.write(f"Trades: {metrics['num_trades']}")
+        fig, ax = plt.subplots()
+        ax.plot(performance, label=name)
+        ax.set_title(f"{name} Performance")
+        ax.set_xlabel("Days")
+        ax.set_ylabel("Portfolio Value ($)")
+        ax.legend()
+        st.pyplot(fig)
+
+    if all_metrics:
+        best = select_best_strategy(all_metrics)
+        st.success(f"🏆 Best Strategy: {best}")
+        weights = load_model()
+        updated_weights = reinforcement_learn(weights, all_metrics)
+        save_model({"weights": updated_weights})
+        st.write("Updated Strategy Weights:")
+        st.json(updated_weights)
+
+        st.subheader("Rolling Backtest")
+        rolling_result = rolling_backtest(bars, strategies[best])
+        fig2, ax2 = plt.subplots()
+        ax2.plot(rolling_result, label=f"{best} Rolling")
+        ax2.set_title("Rolling Backtest Result")
+        ax2.set_xlabel("Rolling Windows")
+        ax2.set_ylabel("Portfolio End Value")
+        ax2.legend()
+        st.pyplot(fig2)
+
+        st.download_button(
+            label="📥 Download Trade History CSV",
+            data=pd.DataFrame(full_trade_log, columns=["Timestamp", "Action", "Shares", "Price"]).to_csv(index=False),
+            file_name="trades.csv",
+            mime="text/csv"
+        )
 
 # --- Deployment Note ---
 st.markdown("""
