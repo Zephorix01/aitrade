@@ -151,7 +151,7 @@ alert_symbol = st.sidebar.text_input("Alert Symbol", "AAPL")
 latest_price = 0.0
 
 try:
-    latest_price = api.get_last_trade(alert_symbol).price
+    latest_price = api.get_stock_latest_trade(alert_symbol).price
     st.sidebar.write(f"🔎 Current Price: ${latest_price:.2f}")
     if latest_price >= alert_price:
         st.sidebar.success("📈 Alert: Price has reached or exceeded your target!")
