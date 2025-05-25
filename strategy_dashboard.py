@@ -40,6 +40,14 @@ def place_paper_trade(symbol, qty, side="buy"):
     except Exception as e:
         return f"❌ Failed to place order: {e}"
 
+def get_latest_price(symbol):
+    try:
+        trade = api.get_last_trade(symbol)
+        return trade.price
+    except Exception as e:
+        st.error(f"Failed to retrieve price: {e}")
+        return None
+
 def track_rl_weights(weights):
     df = pd.DataFrame.from_dict(weights, orient='index', columns=['Weight'])
     df = df.sort_values(by='Weight', ascending=False)
