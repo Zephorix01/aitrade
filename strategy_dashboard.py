@@ -1,68 +1,75 @@
-
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime, timedelta
-from alpaca_trade_api.rest import REST, TimeFrame, TimeFrameUnit
 import smtplib, ssl
 from email.message import EmailMessage
+from alpaca_trade_api.rest import REST, TimeFrame, TimeFrameUnit
 
-# --- Auto Refresh ---
+# --- Auto-Refresh ---
 st_autorefresh(interval=60000, key="auto_refresh")
 
-# --- API Setup ---
+# --- Config (from secrets) ---
 API_KEY = st.secrets["alpaca_api_key"]
 SECRET_KEY = st.secrets["alpaca_secret_key"]
-BASE_URL = "https://paper-api.alpaca.markets"
-api = REST(API_KEY, SECRET_KEY, BASE_URL, api_version='v2')
+BASE_URL = st.secrets["alpaca_base_url"]
+EMAIL_FROM = st.secrets["email_from"]
+EMAIL_TO = st.secrets["email_to"]
+EMAIL_PASS = st.secrets["email_pass"]
+EMAIL_HOST = st.secrets.get("email_host", "smtp.gmail.com")
+EMAIL_PORT = st.secrets.get("email_port", 465)
 
-# --- Utility Functions ---
+api = REST(API_KEY, SECRET_KEY, BASE_URL, api_version="v2")
+
+# --- Helper Functions ---
 def fetch_data(symbol, days=90):
     end = datetime.today()
     start = end - timedelta(days=days)
-    try:
-        bars = api.get_bars(symbol, TimeFrame(1, TimeFrameUnit.Day), start=start.strftime("%Y-%m-%d"), end=end.strftime("%Y-%m-%d"), limit=days, feed='iex')
-        df = bars.df
-        return df
-    except Exception as e:
-        st.error(f"Error fetching data: {e}")
-        return pd.DataFrame()
+    bars = api.get_bars(symbol, TimeFrame(1, TimeFrameUnit.Day), start=start.strftime("%Y-%m-%d"), end=end.strftime("%Y-%m-%d"), limit=days, feed='iex')
+    df = bars.df
+    df = df[df['symbol'] == symbol]
+    return df
 
 def get_latest_price(symbol):
+    return api.get_latest_trade(symbol).price
+
+def place_paper_trade(symbol, qty=1, side="buy"):
     try:
-        trade = api.get_latest_trade(symbol)
-        return trade.price
+        api.submit_order(symbol=symbol, qty=qty, side=side, type="market", time_in_force="gtc")
+        return f"✅ {side.upper()} order placed for {symbol}."
     except Exception as e:
-        st.error(f"Failed to retrieve price: {e}")
-        return None
+        return f"❌ Trade error: {e}"
 
 def send_email_alert(subject, body):
-    try:
-        msg = EmailMessage()
-        msg.set_content(body)
-        msg["Subject"] = subject
-        msg["From"] = st.secrets["email_from"]
-        msg["To"] = st.secrets["email_to"]
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(st.secrets["email_host"], st.secrets["email_port"], context=context) as server:
-            server.login(st.secrets["email_from"], st.secrets["email_pass"])
-            server.send_message(msg)
-    except Exception as e:
-        st.sidebar.error(f"Email failed: {e}")
+    msg = EmailMessage()
+    msg.set_content(body)
+    msg["Subject"] = subject
+    msg["From"] = EMAIL_FROM
+    msg["To"] = EMAIL_TO
+    context = ssl.create_default_context()
+    with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, context=context) as server:
+        server.login(EMAIL_FROM, EMAIL_PASS)
+        server.send_message(msg)
+
+def track_rl_weights(weights):
+    df = pd.DataFrame.from_dict(weights, orient='index', columns=['Weight'])
+    df = df.sort_values(by='Weight', ascending=False)
+    st.subheader("🧠 RL Strategy Weights")
+    st.bar_chart(df)
 
 # --- Strategies ---
 def sma_crossover_strategy(df):
-    df["sma_short"] = df["close"].rolling(window=10).mean()
-    df["sma_long"] = df["close"].rolling(window=30).mean()
+    df["sma_short"] = df["close"].rolling(10).mean()
+    df["sma_long"] = df["close"].rolling(30).mean()
     signals = []
     for i in range(len(df)):
         if i == 0 or pd.isna(df["sma_short"].iloc[i]) or pd.isna(df["sma_long"].iloc[i]):
             signals.append("hold")
-        elif df["sma_short"].iloc[i] > df["sma_long"].iloc[i] and df["sma_short"].iloc[i-1] <= df["sma_long"].iloc[i-1]:
+        elif df["sma_short"].iloc[i] > df["sma_long"].iloc[i] and df["sma_short"].iloc[i - 1] <= df["sma_long"].iloc[i - 1]:
             signals.append("buy")
-        elif df["sma_short"].iloc[i] < df["sma_long"].iloc[i] and df["sma_short"].iloc[i-1] >= df["sma_long"].iloc[i-1]:
+        elif df["sma_short"].iloc[i] < df["sma_long"].iloc[i] and df["sma_short"].iloc[i - 1] >= df["sma_long"].iloc[i - 1]:
             signals.append("sell")
         else:
             signals.append("hold")
@@ -73,102 +80,113 @@ def buy_and_hold_strategy(df):
 
 def rsi_strategy(df, period=14):
     delta = df["close"].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
     avg_gain = gain.rolling(window=period).mean()
     avg_loss = loss.rolling(window=period).mean()
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
+    df["rsi"] = rsi
     signals = []
     for val in rsi:
-        if pd.isna(val):
-            signals.append("hold")
-        elif val < 30:
-            signals.append("buy")
-        elif val > 70:
-            signals.append("sell")
-        else:
-            signals.append("hold")
+        if pd.isna(val): signals.append("hold")
+        elif val < 30: signals.append("buy")
+        elif val > 70: signals.append("sell")
+        else: signals.append("hold")
     return signals
 
 def momentum_strategy(df, period=10):
     momentum = df["close"].diff(period)
     signals = []
     for m in momentum:
-        if pd.isna(m):
-            signals.append("hold")
-        elif m > 0:
-            signals.append("buy")
-        elif m < 0:
-            signals.append("sell")
-        else:
-            signals.append("hold")
+        if pd.isna(m): signals.append("hold")
+        elif m > 0: signals.append("buy")
+        elif m < 0: signals.append("sell")
+        else: signals.append("hold")
     return signals
 
 def mean_reversion_strategy(df, window=20):
-    df["mean"] = df["close"].rolling(window=window).mean()
-    df["std"] = df["close"].rolling(window=window).std()
+    mean = df["close"].rolling(window).mean()
+    std = df["close"].rolling(window).std()
     signals = []
     for i in range(len(df)):
-        if i == 0 or pd.isna(df["mean"].iloc[i]) or pd.isna(df["std"].iloc[i]):
+        if pd.isna(mean[i]) or pd.isna(std[i]):
             signals.append("hold")
-        elif df["close"].iloc[i] < df["mean"].iloc[i] - df["std"].iloc[i]:
+        elif df["close"][i] < mean[i] - std[i]:
             signals.append("buy")
-        elif df["close"].iloc[i] > df["mean"].iloc[i] + df["std"].iloc[i]:
+        elif df["close"][i] > mean[i] + std[i]:
             signals.append("sell")
         else:
             signals.append("hold")
     return signals
 
-# --- Streamlit UI ---
-st.title("📈 AI Strategy Backtester")
+# --- Backtest ---
+def backtest_strategy(df, signals):
+    portfolio = [10000]
+    for sig in signals:
+        if sig == "buy": portfolio.append(portfolio[-1] * 1.01)
+        elif sig == "sell": portfolio.append(portfolio[-1] * 0.99)
+        else: portfolio.append(portfolio[-1])
+    return portfolio
+
+# --- UI ---
+st.title("📊 AI Strategy Dashboard")
+
 symbol = st.sidebar.text_input("Symbol", value="AAPL")
-days = st.sidebar.slider("Days of Data", 30, 180, 90)
+days = st.sidebar.slider("Days", 30, 180, 90)
 
 strategies = {
     "SMA Crossover": sma_crossover_strategy,
     "Buy & Hold": buy_and_hold_strategy,
-    "RSI": rsi_strategy,
+    "RSI Strategy": rsi_strategy,
     "Momentum": momentum_strategy,
     "Mean Reversion": mean_reversion_strategy
 }
-selected = st.sidebar.multiselect("Select Strategies", strategies.keys(), default=list(strategies.keys()))
 
-if st.sidebar.button("Run Backtest"):
-    df = fetch_data(symbol, days)
-    if df.empty:
-        st.warning("No data fetched.")
-    else:
-        for name in selected:
-            st.subheader(name)
-            sig_func = strategies[name]
-            signals = sig_func(df)
-            value = [10000]
-            for signal in signals:
-                if signal == "buy":
-                    value.append(value[-1] * 1.01)
-                elif signal == "sell":
-                    value.append(value[-1] * 0.99)
-                else:
-                    value.append(value[-1])
-            fig, ax = plt.subplots()
-            ax.plot(value)
-            ax.set_title(f"{name} Strategy Portfolio Value")
-            st.pyplot(fig)
+selected_strategies = st.sidebar.multiselect("Choose Strategies", list(strategies.keys()), default=list(strategies.keys()))
+
+df = fetch_data(symbol, days)
+if df.empty:
+    st.warning("No data found.")
+    st.stop()
+
+best_value = 0
+best_strategy = None
+
+for name in selected_strategies:
+    st.subheader(f"📈 {name}")
+    signals = strategies[name](df)
+    result = backtest_strategy(df, signals)
+    final_val = result[-1]
+    if final_val > best_value:
+        best_value = final_val
+        best_strategy = name
+    st.line_chart(result)
+
+st.success(f"🏆 Best Strategy: {best_strategy}")
+track_rl_weights({s: backtest_strategy(df, strategies[s](df))[-1] for s in selected_strategies})
 
 # --- Alerts ---
 st.sidebar.subheader("📣 Price Alert")
-alert_symbol = st.sidebar.text_input("Watch Symbol", value="AAPL", key="alert_symbol")
-alert_price = st.sidebar.number_input("Target Price", value=100.0, step=0.1, key="alert_price")
+alert_symbol = st.sidebar.text_input("Alert Symbol", value=symbol, key="alert_symbol")
+target_price = st.sidebar.number_input("Target Price", value=100.0, step=0.1, key="alert_price")
+if st.sidebar.button("Check Alert"):
+    current = get_latest_price(alert_symbol)
+    st.sidebar.write(f"Current: ${current:.2f}")
+    if current >= target_price:
+        st.sidebar.success("🎯 Target reached!")
+        send_email_alert(f"{alert_symbol} Hit Alert", f"{alert_symbol} hit ${current:.2f}")
+    else:
+        st.sidebar.info("Target not reached.")
 
-if st.sidebar.button("Activate Alert"):
-    st.session_state["alert"] = {"symbol": alert_symbol, "price": alert_price}
-
-if "alert" in st.session_state:
-    info = st.session_state["alert"]
-    latest = get_latest_price(info["symbol"])
-    if latest:
-        st.sidebar.write(f"{info['symbol']} is at ${latest:.2f} (Target: ${info['price']})")
-        if latest >= info["price"]:
-            st.sidebar.success("✅ Target hit!")
-            send_email_alert(f"{info['symbol']} Alert", f"Price hit ${latest:.2f} (target ${info['price']})")
+# --- Auto-Trading ---
+st.sidebar.subheader("🚀 Auto-Trading")
+auto_enabled = st.sidebar.checkbox("Enable Auto-Trade")
+if auto_enabled and best_strategy:
+    sigs = strategies[best_strategy](df)
+    latest_sig = sigs[-1]
+    if latest_sig in ["buy", "sell"]:
+        result = place_paper_trade(symbol, side=latest_sig)
+        st.sidebar.success(result)
+    else:
+        st.sidebar.info("No action taken.")
