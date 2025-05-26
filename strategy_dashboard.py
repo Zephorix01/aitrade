@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,6 +10,11 @@ import itertools
 from datetime import datetime, timedelta
 from alpaca_trade_api.rest import REST, TimeFrame
 from alpaca_trade_api.rest import TimeFrameUnit
+import smtplib, ssl
+from email.message import EmailMessage
+
+# --- Auto-Refresh ---
+st_autorefresh(interval=60000, key="auto_refresh")  # Refresh every 60 seconds
 
 # --- Config ---
 API_KEY = "PKUY243PPUK29FFEBO0W"
@@ -29,13 +35,7 @@ def fetch_data(symbol, days=90):
 
 def place_paper_trade(symbol, qty, side="buy"):
     try:
-        api.submit_order(
-            symbol=symbol,
-            qty=qty,
-            side=side,
-            type='market',
-            time_in_force='gtc'
-        )
+        api.submit_order(symbol=symbol, qty=qty, side=side, type='market', time_in_force='gtc')
         return f"✅ {side.upper()} order for {qty} shares of {symbol} placed."
     except Exception as e:
         return f"❌ Failed to place order: {e}"
@@ -48,15 +48,13 @@ def get_latest_price(symbol):
         st.error(f"Failed to retrieve price: {e}")
         return None
 
-
-
 def track_rl_weights(weights):
     df = pd.DataFrame.from_dict(weights, orient='index', columns=['Weight'])
     df = df.sort_values(by='Weight', ascending=False)
     st.subheader("📊 Reinforcement Learning Strategy Weights")
     st.bar_chart(df)
 
-# Placeholder strategy functions (mock)
+# --- Strategy Functions ---
 def sma_crossover_strategy(data): return [random.choice(['buy', 'sell', 'hold']) for _ in data]
 def buy_and_hold_strategy(data): return ['buy'] + ['hold'] * (len(data)-1)
 def rsi_strategy(data): return [random.choice(['buy', 'sell', 'hold']) for _ in data]
@@ -87,22 +85,13 @@ def backtest_strategy(data, signals):
     }
     return portfolio_value, trades, metrics
 
-def load_model():
-    return {"weights": {}}
+def load_model(): return {"weights": {}}
+def save_model(weights): pass
+def reinforcement_learn(weights, metrics): return {k: random.random() for k in metrics}
+def rolling_backtest(data, strategy_func): return [10000 + i * random.uniform(-10, 10) for i in range(10)]
+def select_best_strategy(metrics): return max(metrics.items(), key=lambda x: x[1]['final_value'])[0]
 
-def save_model(weights):
-    pass
-
-def reinforcement_learn(weights, metrics):
-    return {k: random.random() for k in metrics}
-
-def rolling_backtest(data, strategy_func):
-    return [10000 + i * random.uniform(-10, 10) for i in range(10)]
-
-def select_best_strategy(metrics):
-    return max(metrics.items(), key=lambda x: x[1]['final_value'])[0]
-
-# --- Daily Auto-Retrain and Logging ---
+# --- Auto Retrain ---
 def auto_daily_retrain(symbol="AAPL", days=90):
     from pathlib import Path
     Path("logs").mkdir(exist_ok=True)
@@ -150,7 +139,6 @@ strategies = {
     "Bollinger Bands": bollinger_strategy,
     "EMA Crossover": ema_strategy
 }
-
 selected = st.sidebar.multiselect("Select Strategies", strategies.keys(), default=list(strategies.keys()), key="strategy_select")
 
 if st.sidebar.button("Run Backtest", key="run_backtest_btn"):
@@ -195,22 +183,53 @@ if st.sidebar.button("Run Backtest", key="run_backtest_btn"):
                 mime="text/csv"
             )
 
-# --- Alert System ---
-st.sidebar.subheader("📣 Price Alert System")
+# --- Email + Alerts ---
+EMAIL_FROM = "reece.flew@gmail.com"
+EMAIL_TO = "reece.flew@gmail.com"
+EMAIL_PASS = "Hq1569801"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 465
 
-# Unique keys to avoid any collisions
-alert_symbol = st.sidebar.text_input("Alert Symbol", value="AAPL", key="alert_symbol_input")
-target_price = st.sidebar.number_input("Target Price", min_value=0.0, value=100.0, step=0.1, key="target_price_input")
-
-if st.sidebar.button("Check Price Alert", key="check_price_btn"):
+def send_email_alert(subject, body):
     try:
-        current_price = get_latest_price(alert_symbol)
-        if current_price is not None:
-            st.sidebar.write(f"🔎 Current Price for {alert_symbol}: ${current_price:.2f}")
-            if current_price >= target_price:
-                st.sidebar.success("📈 Alert: Price has reached or exceeded your target!")
-            else:
-                st.sidebar.info("Price has not yet reached your target.")
+        msg = EmailMessage()
+        msg.set_content(body)
+        msg["Subject"] = subject
+        msg["From"] = EMAIL_FROM
+        msg["To"] = EMAIL_TO
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, context=context) as server:
+            server.login(EMAIL_FROM, EMAIL_PASS)
+            server.send_message(msg)
     except Exception as e:
-        st.sidebar.error(f"Failed to retrieve price: {e}")
+        st.sidebar.error(f"📧 Email failed: {e}")
 
+# --- Price Alerts Section ---
+st.sidebar.subheader("📣 Price Alerts")
+
+alert_data = st.session_state.get("alert_data", [])
+new_symbol = st.sidebar.text_input("New Alert Symbol", value="", key="new_alert_symbol")
+new_price = st.sidebar.number_input("Target Price", min_value=0.0, value=0.0, step=0.1, key="new_alert_price")
+
+if st.sidebar.button("➕ Add Alert", key="add_alert_btn"):
+    if new_symbol and new_price > 0:
+        alert_data.append({"symbol": new_symbol.upper(), "target": new_price})
+        st.session_state.alert_data = alert_data
+    else:
+        st.sidebar.warning("Please enter valid symbol and price.")
+
+if alert_data:
+    st.sidebar.write("🕵️‍♂️ Monitoring:")
+    for alert in alert_data:
+        try:
+            trade = api.get_latest_trade(alert["symbol"])
+            price = trade.price
+            st.sidebar.write(f"{alert['symbol']}: ${price:.2f} (Target: ${alert['target']})")
+            if price >= alert["target"]:
+                st.sidebar.success(f"✅ {alert['symbol']} hit ${alert['target']}!")
+                send_email_alert(
+                    subject=f"Alert Hit: {alert['symbol']}",
+                    body=f"{alert['symbol']} reached ${price:.2f} (target was {alert['target']})"
+                )
+        except Exception as e:
+            st.sidebar.error(f"{alert['symbol']}: {e}")
