@@ -233,3 +233,23 @@ if alert_data:
                 )
         except Exception as e:
             st.sidebar.error(f"{alert['symbol']}: {e}")
+
+# --- Alert System ---
+st.sidebar.subheader("📣 Price Alert System")
+
+# Unique keys to avoid any collisions
+alert_symbol = st.sidebar.text_input("Alert Symbol", value="AAPL", key="alert_symbol_input")
+target_price = st.sidebar.number_input("Target Price", min_value=0.0, value=100.0, step=0.1, key="target_price_input")
+
+if st.sidebar.button("Check Price Alert", key="check_price_btn"):
+    try:
+        current_price = get_latest_price(alert_symbol)
+        if current_price is not None:
+            st.sidebar.write(f"🔎 Current Price for {alert_symbol}: ${current_price:.2f}")
+            if current_price >= target_price:
+                st.sidebar.success("📈 Alert: Price has reached or exceeded your target!")
+            else:
+                st.sidebar.info("Price has not yet reached your target.")
+    except Exception as e:
+        st.sidebar.error(f"Failed to retrieve price: {e}")
+
