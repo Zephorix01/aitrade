@@ -1,15 +1,12 @@
+
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-import pickle
-import csv
 import random
-import itertools
 from datetime import datetime, timedelta
-from alpaca_trade_api.rest import REST, TimeFrame
-from alpaca_trade_api.rest import TimeFrameUnit
+from alpaca_trade_api.rest import REST, TimeFrame, TimeFrameUnit
 import smtplib, ssl
 from email.message import EmailMessage
 
@@ -91,39 +88,6 @@ def reinforcement_learn(weights, metrics): return {k: random.random() for k in m
 def rolling_backtest(data, strategy_func): return [10000 + i * random.uniform(-10, 10) for i in range(10)]
 def select_best_strategy(metrics): return max(metrics.items(), key=lambda x: x[1]['final_value'])[0]
 
-# --- Auto Retrain ---
-def auto_daily_retrain(symbol="AAPL", days=90):
-    from pathlib import Path
-    Path("logs").mkdir(exist_ok=True)
-    bars = fetch_data(symbol, days)
-
-    strategies = {
-        "SMA Crossover": sma_crossover_strategy,
-        "Buy & Hold": buy_and_hold_strategy,
-        "RSI": rsi_strategy,
-        "Momentum": momentum_strategy,
-        "Mean Reversion": mean_reversion_strategy,
-        "MACD": macd_strategy,
-        "Bollinger Bands": bollinger_strategy,
-        "EMA Crossover": ema_strategy
-    }
-
-    all_metrics = {}
-    for name, strategy in strategies.items():
-        signals = strategy(bars)
-        _, _, metrics = backtest_strategy(bars, signals)
-        all_metrics[name] = metrics
-
-    weights = load_model()
-    updated = reinforcement_learn(weights, all_metrics)
-    save_model({"weights": updated})
-
-    log_file = f"logs/log_{datetime.today().strftime('%Y-%m-%d')}.csv"
-    df = pd.DataFrame.from_dict(all_metrics, orient='index')
-    df["date"] = datetime.today().strftime('%Y-%m-%d')
-    df.to_csv(log_file, index=True)
-    return log_file
-
 # --- Streamlit UI ---
 st.title("📈 AI-Powered Strategy Backtester")
 symbol = st.sidebar.text_input("Symbol", "AAPL", key="symbol_input")
@@ -183,7 +147,7 @@ if st.sidebar.button("Run Backtest", key="run_backtest_btn"):
                 mime="text/csv"
             )
 
-# --- Email + Alerts ---
+# --- Email + Unified Alerts ---
 EMAIL_FROM = "reece.flew@gmail.com"
 EMAIL_TO = "reece.flew@gmail.com"
 EMAIL_PASS = "Hq1569801"
@@ -204,18 +168,18 @@ def send_email_alert(subject, body):
     except Exception as e:
         st.sidebar.error(f"📧 Email failed: {e}")
 
-# --- Unified Price Alert System ---
-st.sidebar.subheader("📣 Real-Time Price Alert System")
+# --- Price Alert UI ---
+with st.sidebar.expander("📣 Real-Time Price Alert System", expanded=True):
+    alert_symbol = st.text_input("Symbol to Watch", value="AAPL", key="alert_symbol_key")
+    target_price = st.number_input("Target Price ($)", min_value=0.0, value=100.0, step=0.1, key="alert_price_key")
 
-alert_symbol = st.sidebar.text_input("Symbol to Watch", value="AAPL", key="alert_symbol_key")
-target_price = st.sidebar.number_input("Target Price ($)", min_value=0.0, value=100.0, step=0.1, key="alert_price_key")
+    if st.button("Activate Alert", key="activate_alert_btn"):
+        st.session_state["active_alert"] = {
+            "symbol": alert_symbol.upper(),
+            "target": target_price
+        }
 
-if st.sidebar.button("Activate Alert", key="activate_alert_btn"):
-    st.session_state["active_alert"] = {
-        "symbol": alert_symbol.upper(),
-        "target": target_price
-    }
-
+# --- Check Active Alert ---
 if "active_alert" in st.session_state:
     alert = st.session_state["active_alert"]
     try:
