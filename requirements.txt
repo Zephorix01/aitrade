@@ -1,6 +1,15 @@
+<<<<<<< HEAD
 streamlit
 streamlit-autorefresh
 alpaca-trade-api
 pandas
 matplotlib
 numpy
+=======
+streamlit
+streamlit-autorefresh
+alpaca-trade-api
+pandas
+matplotlib
+numpy
+>>>>>>> 4dfab62 (Rebuild: Clean project structure with updated secrets and requirements)
