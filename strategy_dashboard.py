@@ -148,11 +148,11 @@ if st.sidebar.button("Run Backtest", key="run_backtest_btn"):
             )
 
 # --- Email + Unified Alerts ---
-EMAIL_FROM = "reece.flew@gmail.com"
-EMAIL_TO = "reece.flew@gmail.com"
-EMAIL_PASS = "Hq1569801"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 465
+EMAIL_FROM = st.secrets["email_from"]
+EMAIL_TO = st.secrets["email_to"]
+EMAIL_PASS = st.secrets["email_pass"]
+EMAIL_HOST = st.secrets.get("email_host", "smtp.gmail.com")
+EMAIL_PORT = st.secrets.get("email_port", 465)
 
 def send_email_alert(subject, body):
     try:
