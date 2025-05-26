@@ -1,8 +1,6 @@
-streamlit>=1.25.0
-streamlit-autorefresh>=0.0.3
-pandas>=2.1.0
-matplotlib>=3.7.0
-numpy>=1.24.0
-alpaca-trade-api>=3.0.0
-email-validator>=2.0.0
-python-dotenv>=1.0.0
+streamlit
+streamlit-autorefresh
+alpaca-trade-api
+pandas
+matplotlib
+numpy
