@@ -204,52 +204,29 @@ def send_email_alert(subject, body):
     except Exception as e:
         st.sidebar.error(f"📧 Email failed: {e}")
 
-# --- Price Alerts Section ---
-st.sidebar.subheader("📣 Price Alerts")
+# --- Unified Price Alert System ---
+st.sidebar.subheader("📣 Real-Time Price Alert System")
 
-alert_data = st.session_state.get("alert_data", [])
-new_symbol = st.sidebar.text_input("New Alert Symbol", value="", key="new_alert_symbol")
-new_price = st.sidebar.number_input("Target Price", min_value=0.0, value=0.0, step=0.1, key="new_alert_price")
+alert_symbol = st.sidebar.text_input("Symbol to Watch", value="AAPL", key="alert_symbol_key")
+target_price = st.sidebar.number_input("Target Price ($)", min_value=0.0, value=100.0, step=0.1, key="alert_price_key")
 
-if st.sidebar.button("➕ Add Alert", key="add_alert_btn"):
-    if new_symbol and new_price > 0:
-        alert_data.append({"symbol": new_symbol.upper(), "target": new_price})
-        st.session_state.alert_data = alert_data
-    else:
-        st.sidebar.warning("Please enter valid symbol and price.")
+if st.sidebar.button("Activate Alert", key="activate_alert_btn"):
+    st.session_state["active_alert"] = {
+        "symbol": alert_symbol.upper(),
+        "target": target_price
+    }
 
-if alert_data:
-    st.sidebar.write("🕵️‍♂️ Monitoring:")
-    for alert in alert_data:
-        try:
-            trade = api.get_latest_trade(alert["symbol"])
-            price = trade.price
-            st.sidebar.write(f"{alert['symbol']}: ${price:.2f} (Target: ${alert['target']})")
-            if price >= alert["target"]:
+if "active_alert" in st.session_state:
+    alert = st.session_state["active_alert"]
+    try:
+        current_price = get_latest_price(alert["symbol"])
+        if current_price:
+            st.sidebar.write(f"🔎 {alert['symbol']} Current: ${current_price:.2f} | Target: ${alert['target']}")
+            if current_price >= alert["target"]:
                 st.sidebar.success(f"✅ {alert['symbol']} hit ${alert['target']}!")
                 send_email_alert(
-                    subject=f"Alert Hit: {alert['symbol']}",
-                    body=f"{alert['symbol']} reached ${price:.2f} (target was {alert['target']})"
+                    subject=f"{alert['symbol']} Alert Hit",
+                    body=f"The stock reached ${current_price:.2f}, meeting your alert of ${alert['target']}."
                 )
-        except Exception as e:
-            st.sidebar.error(f"{alert['symbol']}: {e}")
-
-# --- Alert System ---
-st.sidebar.subheader("📣 Price Alert System")
-
-# Unique keys to avoid any collisions
-alert_symbol = st.sidebar.text_input("Alert Symbol", value="AAPL", key="alert_symbol_input")
-target_price = st.sidebar.number_input("Target Price", min_value=0.0, value=100.0, step=0.1, key="target_price_input")
-
-if st.sidebar.button("Check Price Alert", key="check_price_btn"):
-    try:
-        current_price = get_latest_price(alert_symbol)
-        if current_price is not None:
-            st.sidebar.write(f"🔎 Current Price for {alert_symbol}: ${current_price:.2f}")
-            if current_price >= target_price:
-                st.sidebar.success("📈 Alert: Price has reached or exceeded your target!")
-            else:
-                st.sidebar.info("Price has not yet reached your target.")
     except Exception as e:
-        st.sidebar.error(f"Failed to retrieve price: {e}")
-
+        st.sidebar.error(f"Error checking price: {e}")
