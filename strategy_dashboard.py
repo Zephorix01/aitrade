@@ -42,11 +42,13 @@ def place_paper_trade(symbol, qty, side="buy"):
 
 def get_latest_price(symbol):
     try:
-        latest_price = get_latest_price(alert_symbol)
+        trade = api.get_latest_trade(symbol)
         return trade.price
     except Exception as e:
         st.error(f"Failed to retrieve price: {e}")
         return None
+
+
 
 def track_rl_weights(weights):
     df = pd.DataFrame.from_dict(weights, orient='index', columns=['Weight'])
@@ -192,3 +194,23 @@ if st.sidebar.button("Run Backtest", key="run_backtest_btn"):
                 file_name="trades.csv",
                 mime="text/csv"
             )
+
+# --- Alert System ---
+st.sidebar.subheader("📣 Price Alert System")
+
+# Unique keys to avoid any collisions
+alert_symbol = st.sidebar.text_input("Alert Symbol", value="AAPL", key="alert_symbol_input")
+target_price = st.sidebar.number_input("Target Price", min_value=0.0, value=100.0, step=0.1, key="target_price_input")
+
+if st.sidebar.button("Check Price Alert", key="check_price_btn"):
+    try:
+        current_price = get_latest_price(alert_symbol)
+        if current_price is not None:
+            st.sidebar.write(f"🔎 Current Price for {alert_symbol}: ${current_price:.2f}")
+            if current_price >= target_price:
+                st.sidebar.success("📈 Alert: Price has reached or exceeded your target!")
+            else:
+                st.sidebar.info("Price has not yet reached your target.")
+    except Exception as e:
+        st.sidebar.error(f"Failed to retrieve price: {e}")
+
